@@ -1,27 +1,62 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, DollarSign, TrendingUp, AlertCircle } from 'lucide-react';
+import { creditClientService } from '@/services/creditClientService';
+import { purchaseService } from '@/services/purchaseService';
+import { CreditClient, Purchase } from '@/types/appwrite';
 
 const DashboardEmpresa: React.FC = () => {
-  const { user } = useAuth();
-  const { clientes, compras } = useData();
+  const { company } = useAuth();
+  const [creditClients, setCreditClients] = useState<CreditClient[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const clientesEmpresa = clientes.filter(c => c.empresaId === user?.empresaId);
-  const comprasEmpresa = compras.filter(c => c.empresaId === user?.empresaId);
+  useEffect(() => {
+    if (company) {
+      loadData();
+    }
+  }, [company]);
 
-  const totalClientes = clientesEmpresa.length;
-  const clientesAprovados = clientesEmpresa.filter(c => c.aprovado).length;
+  const loadData = async () => {
+    try {
+      if (!company) return;
+      
+      const [clients, companyPurchases] = await Promise.all([
+        creditClientService.getCreditClientsByCompany(company.$id),
+        purchaseService.getPurchasesByCompany(company.$id)
+      ]);
+      
+      setCreditClients(clients);
+      setPurchases(companyPurchases);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  const totalClientes = creditClients.length;
+  const clientesAprovados = creditClients.filter(c => c.status === 'approved').length;
   
-  const totalValorReceber = comprasEmpresa
-    .filter(c => c.status === 'ativa' || c.status === 'vencida')
-    .reduce((acc, c) => acc + c.valor, 0);
+  const totalValorReceber = purchases
+    .filter(c => c.status === 'active' || c.status === 'overdue')
+    .reduce((acc, c) => acc + c.value, 0);
   
-  const totalLimiteConcedido = clientesEmpresa.reduce((acc, c) => acc + c.limiteAjustado, 0);
+  const totalLimiteConcedido = creditClients
+    .filter(c => c.status === 'approved')
+    .reduce((acc, c) => acc + c.approvedLimit, 0);
 
-  const comprasVencidas = comprasEmpresa.filter(c => c.status === 'vencida').length;
+  const comprasVencidas = purchases.filter(c => c.status === 'overdue').length;
 
   const stats = [
     {
@@ -95,20 +130,28 @@ const DashboardEmpresa: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {clientesEmpresa.slice(-5).map((cliente) => (
-                <div key={cliente.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900">{cliente.nome}</p>
-                    <p className="text-sm text-gray-600">{cliente.cpf}</p>
+              {creditClients.slice(-5).map((cliente) => {
+                const clientPurchases = purchases.filter(p => 
+                  p.creditClientId === cliente.$id && (p.status === 'active' || p.status === 'overdue')
+                );
+                const usedLimit = clientPurchases.reduce((sum, p) => sum + p.value, 0);
+                const availableLimit = cliente.approvedLimit - usedLimit;
+                
+                return (
+                  <div key={cliente.$id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900">{cliente.name}</p>
+                      <p className="text-sm text-gray-600">{cliente.cpf}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-primary">
+                        R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-gray-500">Limite disponível</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-primary">
-                      R$ {cliente.limiteDisponivel.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-gray-500">Limite disponível</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -120,25 +163,26 @@ const DashboardEmpresa: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {comprasEmpresa.slice(-5).map((compra) => {
-                const cliente = clientesEmpresa.find(c => c.id === compra.clienteId);
+              {purchases.slice(-5).map((purchase) => {
+                const cliente = creditClients.find(c => c.$id === purchase.creditClientId);
                 return (
-                  <div key={compra.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div key={purchase.$id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
-                      <p className="font-medium text-gray-900">{cliente?.nome}</p>
+                      <p className="font-medium text-gray-900">{cliente?.name}</p>
                       <p className="text-sm text-gray-600">
-                        {compra.dataCompra.toLocaleDateString('pt-BR')}
+                        {new Date(purchase.purchaseDate).toLocaleDateString('pt-BR')}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium text-primary">
-                        R$ {compra.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {purchase.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </p>
                       <p className={`text-xs ${
-                        compra.status === 'ativa' ? 'text-green-600' :
-                        compra.status === 'vencida' ? 'text-red-600' : 'text-gray-600'
+                        purchase.status === 'active' ? 'text-green-600' :
+                        purchase.status === 'overdue' ? 'text-red-600' : 'text-gray-600'
                       }`}>
-                        {compra.status.charAt(0).toUpperCase() + compra.status.slice(1)}
+                        {purchase.status === 'active' ? 'Ativa' :
+                         purchase.status === 'overdue' ? 'Vencida' : 'Paga'}
                       </p>
                     </div>
                   </div>

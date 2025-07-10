@@ -1,96 +1,178 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useData } from '@/contexts/DataContext';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Edit, Search, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Users, Edit, Search, CheckCircle, AlertCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
+import { creditClientService } from '@/services/creditClientService';
+import { purchaseService } from '@/services/purchaseService';
+import { CreditClient, Purchase } from '@/types/appwrite';
 
 const ClientesManager: React.FC = () => {
-  const { user } = useAuth();
-  const { clientes, addCliente, updateCliente } = useData();
+  const { company } = useAuth();
+  const navigate = useNavigate();
+  const [creditClients, setCreditClients] = useState<CreditClient[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCliente, setEditingCliente] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [formData, setFormData] = useState({
-    nome: '',
-    endereco: '',
+    name: '',
+    address: '',
     email: '',
     cpf: '',
-    telefone: '',
-    renda: 0,
-    limiteInicial: 1000,
-    limiteAjustado: 1000
+    phone: '',
+    income: 0,
+    initialLimit: 1000,
+    approvedLimit: 1000
   });
 
-  const clientesEmpresa = clientes.filter(c => c.empresaId === user?.empresaId);
-  const filteredClientes = clientesEmpresa.filter(cliente =>
-    cliente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  useEffect(() => {
+    if (company) {
+      loadCreditClients();
+      loadPurchases();
+    }
+  }, [company]);
+
+  const loadCreditClients = async () => {
+    try {
+      if (!company) return;
+      const clients = await creditClientService.getCreditClientsByCompany(company.$id);
+      setCreditClients(clients);
+    } catch (error) {
+      console.error('Error loading credit clients:', error);
+      toast.error('Erro ao carregar clientes');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadPurchases = async () => {
+    try {
+      if (!company) return;
+      const companyPurchases = await purchaseService.getPurchasesByCompany(company.$id);
+      setPurchases(companyPurchases);
+    } catch (error) {
+      console.error('Error loading purchases:', error);
+    }
+  };
+
+  const filteredClientes = creditClients.filter(cliente =>
+    cliente.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cliente.cpf.includes(searchTerm)
   );
 
+  const calculateAvailableLimit = (clientId: string, approvedLimit: number) => {
+    const clientPurchases = purchases.filter(p => 
+      p.creditClientId === clientId && (p.status === 'active' || p.status === 'overdue')
+    );
+    const usedLimit = clientPurchases.reduce((sum, purchase) => sum + purchase.value, 0);
+    return approvedLimit - usedLimit;
+  };
+
   const resetForm = () => {
     setFormData({
-      nome: '',
-      endereco: '',
+      name: '',
+      address: '',
       email: '',
       cpf: '',
-      telefone: '',
-      renda: 0,
-      limiteInicial: 1000,
-      limiteAjustado: 1000
+      phone: '',
+      income: 0,
+      initialLimit: 1000,
+      approvedLimit: 1000
     });
     setEditingCliente(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (editingCliente) {
-      updateCliente(editingCliente, {
-        ...formData,
-        limiteDisponivel: formData.limiteAjustado
-      });
-      toast.success('Cliente atualizado com sucesso!');
-    } else {
-      addCliente({
-        ...formData,
-        empresaId: user?.empresaId!,
-        limiteDisponivel: formData.limiteAjustado,
-        aprovado: false
-      });
-      toast.success('Cliente cadastrado com sucesso!');
+  const validateForm = () => {
+    if (!formData.name.trim()) {
+      toast.error('Nome é obrigatório');
+      return false;
     }
-    
-    setIsDialogOpen(false);
-    resetForm();
+    if (!formData.cpf.trim()) {
+      toast.error('CPF é obrigatório');
+      return false;
+    }
+    if (!formData.address.trim()) {
+      toast.error('Endereço é obrigatório');
+      return false;
+    }
+    if (!formData.phone.trim()) {
+      toast.error('Telefone é obrigatório');
+      return false;
+    }
+    return true;
   };
 
-  const handleEdit = (cliente: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!company || !validateForm()) return;
+
+    try {
+      if (editingCliente) {
+        await creditClientService.updateCreditClient(editingCliente, {
+          ...formData,
+        });
+        toast.success('Cliente atualizado com sucesso!');
+      } else {
+        await creditClientService.createCreditClient({
+          ...formData,
+          companyId: company.$id,
+          status: 'pending'
+        });
+        toast.success('Cliente cadastrado com sucesso!');
+      }
+      
+      setIsDialogOpen(false);
+      resetForm();
+      loadCreditClients();
+    } catch (error) {
+      console.error('Error saving client:', error);
+      toast.error('Erro ao salvar cliente');
+    }
+  };
+
+  const handleEdit = (cliente: CreditClient) => {
     setFormData({
-      nome: cliente.nome,
-      endereco: cliente.endereco,
+      name: cliente.name,
+      address: cliente.address,
       email: cliente.email,
       cpf: cliente.cpf,
-      telefone: cliente.telefone,
-      renda: cliente.renda,
-      limiteInicial: cliente.limiteInicial,
-      limiteAjustado: cliente.limiteAjustado
+      phone: cliente.phone,
+      income: cliente.income,
+      initialLimit: cliente.initialLimit,
+      approvedLimit: cliente.approvedLimit
     });
-    setEditingCliente(cliente.id);
+    setEditingCliente(cliente.$id);
     setIsDialogOpen(true);
   };
 
-  const handleApprove = (clienteId: string) => {
-    updateCliente(clienteId, { aprovado: true });
-    toast.success('Crédito aprovado com sucesso!');
+  const handleApprove = async (clienteId: string) => {
+    try {
+      await creditClientService.approveCreditClient(clienteId);
+      toast.success('Crédito aprovado com sucesso!');
+      loadCreditClients();
+    } catch (error) {
+      console.error('Error approving client:', error);
+      toast.error('Erro ao aprovar cliente');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -120,11 +202,11 @@ const ClientesManager: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="nome">Nome Completo *</Label>
+                  <Label htmlFor="name">Nome Completo *</Label>
                   <Input
-                    id="nome"
-                    value={formData.nome}
-                    onChange={(e) => setFormData({...formData, nome: e.target.value})}
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
                     placeholder="João da Silva"
                     required
                   />
@@ -143,11 +225,11 @@ const ClientesManager: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="endereco">Endereço *</Label>
+                <Label htmlFor="address">Endereço *</Label>
                 <Input
-                  id="endereco"
-                  value={formData.endereco}
-                  onChange={(e) => setFormData({...formData, endereco: e.target.value})}
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => setFormData({...formData, address: e.target.value})}
                   placeholder="Endereço completo"
                   required
                 />
@@ -166,11 +248,11 @@ const ClientesManager: React.FC = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="telefone">Telefone *</Label>
+                  <Label htmlFor="phone">Telefone *</Label>
                   <Input
-                    id="telefone"
-                    value={formData.telefone}
-                    onChange={(e) => setFormData({...formData, telefone: e.target.value})}
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
                     placeholder="(00) 00000-0000"
                     required
                   />
@@ -179,34 +261,34 @@ const ClientesManager: React.FC = () => {
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="renda">Renda (R$)</Label>
+                  <Label htmlFor="income">Renda (R$)</Label>
                   <Input
-                    id="renda"
+                    id="income"
                     type="number"
-                    value={formData.renda}
-                    onChange={(e) => setFormData({...formData, renda: parseFloat(e.target.value)})}
+                    value={formData.income}
+                    onChange={(e) => setFormData({...formData, income: parseFloat(e.target.value) || 0})}
                     placeholder="3000"
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="limiteInicial">Limite Inicial (R$)</Label>
+                  <Label htmlFor="initialLimit">Limite Inicial (R$)</Label>
                   <Input
-                    id="limiteInicial"
+                    id="initialLimit"
                     type="number"
-                    value={formData.limiteInicial}
-                    onChange={(e) => setFormData({...formData, limiteInicial: parseFloat(e.target.value)})}
+                    value={formData.initialLimit}
+                    onChange={(e) => setFormData({...formData, initialLimit: parseFloat(e.target.value) || 0})}
                     placeholder="1000"
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="limiteAjustado">Limite Ajustado (R$)</Label>
+                  <Label htmlFor="approvedLimit">Limite Ajustado (R$)</Label>
                   <Input
-                    id="limiteAjustado"
+                    id="approvedLimit"
                     type="number"
-                    value={formData.limiteAjustado}
-                    onChange={(e) => setFormData({...formData, limiteAjustado: parseFloat(e.target.value)})}
+                    value={formData.approvedLimit}
+                    onChange={(e) => setFormData({...formData, approvedLimit: parseFloat(e.target.value) || 0})}
                     placeholder="1200"
                   />
                 </div>
@@ -231,7 +313,7 @@ const ClientesManager: React.FC = () => {
             <div>
               <CardTitle>Clientes Cadastrados</CardTitle>
               <CardDescription>
-                {clientesEmpresa.length} cliente(s) cadastrado(s)
+                {creditClients.length} cliente(s) cadastrado(s)
               </CardDescription>
             </div>
             <div className="relative">
@@ -247,77 +329,90 @@ const ClientesManager: React.FC = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {filteredClientes.map((cliente) => (
-              <Card key={cliente.id} className="card-hover">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="p-2 bg-primary/10 rounded-full">
-                        <Users className="h-6 w-6 text-primary" />
-                      </div>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {cliente.nome}
-                          </h3>
-                          <Badge variant={cliente.aprovado ? "default" : "secondary"}>
-                            {cliente.aprovado ? (
-                              <>
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                Aprovado
-                              </>
-                            ) : (
-                              <>
-                                <AlertCircle className="w-3 h-3 mr-1" />
-                                Pendente
-                              </>
-                            )}
-                          </Badge>
+            {filteredClientes.map((cliente) => {
+              const availableLimit = calculateAvailableLimit(cliente.$id, cliente.approvedLimit);
+              return (
+                <Card key={cliente.$id} className="card-hover">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="p-2 bg-primary/10 rounded-full">
+                          <Users className="h-6 w-6 text-primary" />
                         </div>
-                        <p className="text-sm text-gray-600">CPF: {cliente.cpf}</p>
-                        <p className="text-sm text-gray-600">{cliente.telefone}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center space-x-6">
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-primary">
-                          R$ {cliente.limiteDisponivel.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
-                        <p className="text-xs text-gray-500">Limite disponível</p>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {cliente.name}
+                            </h3>
+                            <Badge variant={cliente.status === 'approved' ? "default" : "secondary"}>
+                              {cliente.status === 'approved' ? (
+                                <>
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Aprovado
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className="w-3 h-3 mr-1" />
+                                  Pendente
+                                </>
+                              )}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600">CPF: {cliente.cpf}</p>
+                          <p className="text-sm text-gray-600">{cliente.phone}</p>
+                        </div>
                       </div>
                       
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-gray-900">
-                          R$ {cliente.limiteAjustado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
-                        <p className="text-xs text-gray-500">Limite total</p>
-                      </div>
-                      
-                      <div className="flex space-x-2">
-                        {!cliente.aprovado && (
+                      <div className="flex items-center space-x-6">
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-primary">
+                            R$ {availableLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-xs text-gray-500">Limite disponível</p>
+                        </div>
+                        
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-gray-900">
+                            R$ {cliente.approvedLimit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-xs text-gray-500">Limite total</p>
+                        </div>
+                        
+                        <div className="flex space-x-2">
+                          {cliente.status === 'approved' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`/clientes/${cliente.$id}/extrato`)}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Extrato
+                            </Button>
+                          )}
+                          {cliente.status !== 'approved' && (
+                            <Button
+                              size="sm"
+                              className="gradient-bg"
+                              onClick={() => handleApprove(cliente.$id)}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Aprovar
+                            </Button>
+                          )}
                           <Button
                             size="sm"
-                            className="gradient-bg"
-                            onClick={() => handleApprove(cliente.id)}
+                            variant="outline"
+                            onClick={() => handleEdit(cliente)}
                           >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Aprovar
+                            <Edit className="h-4 w-4" />
                           </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEdit(cliente)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </CardContent>
       </Card>

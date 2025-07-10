@@ -1,64 +1,75 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, AuthContextType } from '@/types/auth';
+import { AppwriteUser } from '@/types/appwrite';
+import { authService } from '@/services/authService';
+import { companyService } from '@/services/companyService';
+import { Company } from '@/types/appwrite';
+
+interface AuthContextType {
+  user: AppwriteUser | null;
+  company: Company | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  isLoading: boolean;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for MVP
-const mockUsers: User[] = [
-  {
-    id: '1',
-    email: 'admin@crediario.com',
-    name: 'Administrador',
-    role: 'admin',
-    createdAt: new Date()
-  },
-  {
-    id: '2',
-    email: 'empresa@teste.com',
-    name: 'Empresa Teste',
-    role: 'empresa',
-    empresaId: '1',
-    createdAt: new Date()
-  }
-];
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppwriteUser | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in from localStorage
-    const storedUser = localStorage.getItem('crediario_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    checkUser();
   }, []);
+
+  const checkUser = async () => {
+    try {
+      const currentUser = await authService.getCurrentUser();
+      setUser(currentUser);
+      
+      if (currentUser && currentUser.prefs.role === 'empresa') {
+        const userCompany = await companyService.getCompanyByUserId(currentUser.$id);
+        setCompany(userCompany);
+      }
+    } catch (error) {
+      console.error('Error checking user:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
-    
-    // Mock authentication - in production, this would be a real API call
-    const foundUser = mockUsers.find(u => u.email === email);
-    
-    if (foundUser && password === '123456') {
-      setUser(foundUser);
-      localStorage.setItem('crediario_user', JSON.stringify(foundUser));
-    } else {
+    try {
+      const user = await authService.login(email, password);
+      setUser(user);
+      
+      if (user.prefs.role === 'empresa') {
+        const userCompany = await companyService.getCompanyByUserId(user.$id);
+        setCompany(userCompany);
+      }
+    } catch (error) {
+      console.error('Login error:', error);
       throw new Error('Credenciais inválidas');
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('crediario_user');
+  const logout = async () => {
+    try {
+      await authService.logout();
+      setUser(null);
+      setCompany(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, company, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
