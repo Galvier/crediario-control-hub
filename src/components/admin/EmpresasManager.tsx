@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { companyService } from '@/services/companyService';
@@ -92,15 +91,13 @@ const EmpresasManager: React.FC = () => {
         });
         toast.success('Empresa atualizada com sucesso!');
       } else {
-        // Create user first
-        const newUser = await authService.createUser({
-          email: formData.userEmail,
-          password: formData.userPassword,
-          name: formData.userName,
-          prefs: {
-            role: 'empresa' as const
-          }
-        });
+        // Create user first - fix: pass individual parameters instead of object
+        const newUser = await authService.createUser(
+          formData.userEmail,
+          formData.userPassword,
+          formData.userName,
+          'empresa'
+        );
 
         // Then create company
         await companyService.createCompany({
