@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,7 @@ const LoginForm: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
@@ -84,13 +85,13 @@ const LoginForm: React.FC = () => {
               </Button>
             </form>
 
-            <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <h3 className="font-medium text-slate-900 mb-2">Credenciais de Teste:</h3>
-              <div className="text-sm text-slate-600 space-y-1">
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h3 className="font-medium text-gray-900 mb-2">Credenciais de Teste:</h3>
+              <div className="text-sm text-gray-600 space-y-1">
                 <p><strong>Admin:</strong> admin@teste.com / 123456</p>
                 <p><strong>Empresa:</strong> empresa@teste.com / 123456</p>
               </div>
-              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+              <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-xs text-purple-700">
                 <p><strong>Nota:</strong> Sistema funcionando em modo teste (sem Appwrite)</p>
               </div>
             </div>
