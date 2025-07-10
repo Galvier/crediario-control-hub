@@ -13,7 +13,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
 
-  const navigation = user?.role === 'admin' ? [
+  const navigation = user?.prefs.role === 'admin' ? [
     { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
     { name: 'Empresas', href: '/empresas', icon: Building2 },
   ] : [
@@ -60,7 +60,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <div className="text-sm text-gray-600">
                 <span className="font-medium">{user?.name}</span>
                 <span className="ml-2 px-2 py-1 bg-primary/10 text-primary rounded-full text-xs">
-                  {user?.role === 'admin' ? 'Administrador' : 'Empresa'}
+                  {user?.prefs.role === 'admin' ? 'Administrador' : 'Empresa'}
                 </span>
               </div>
               <Button

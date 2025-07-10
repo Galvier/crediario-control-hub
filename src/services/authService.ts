@@ -6,7 +6,7 @@ export const authService = {
   async login(email: string, password: string): Promise<AppwriteUser> {
     await account.createEmailPasswordSession(email, password);
     const user = await account.get();
-    return user as AppwriteUser;
+    return user as unknown as AppwriteUser;
   },
 
   async logout(): Promise<void> {
@@ -16,7 +16,7 @@ export const authService = {
   async getCurrentUser(): Promise<AppwriteUser | null> {
     try {
       const user = await account.get();
-      return user as AppwriteUser;
+      return user as unknown as AppwriteUser;
     } catch {
       return null;
     }
@@ -30,6 +30,6 @@ export const authService = {
     await account.updatePrefs({ role });
     
     const updatedUser = await account.get();
-    return updatedUser as AppwriteUser;
+    return updatedUser as unknown as AppwriteUser;
   }
 };

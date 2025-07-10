@@ -10,7 +10,7 @@ export const companyService = {
       ID.unique(),
       data
     );
-    return response as Company;
+    return response as unknown as Company;
   },
 
   async getCompanies(): Promise<Company[]> {
@@ -18,7 +18,7 @@ export const companyService = {
       DATABASE_ID,
       COLLECTIONS.COMPANIES
     );
-    return response.documents as Company[];
+    return response.documents as unknown as Company[];
   },
 
   async updateCompany(id: string, data: Partial<Company>): Promise<Company> {
@@ -28,7 +28,7 @@ export const companyService = {
       id,
       data
     );
-    return response as Company;
+    return response as unknown as Company;
   },
 
   async deleteCompany(id: string): Promise<void> {
@@ -46,7 +46,7 @@ export const companyService = {
         COLLECTIONS.COMPANIES,
         [Query.equal('userId', userId)]
       );
-      return response.documents[0] as Company || null;
+      return response.documents[0] as unknown as Company || null;
     } catch {
       return null;
     }

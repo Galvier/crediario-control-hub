@@ -1,19 +1,65 @@
 
-import React from 'react';
-import { useData } from '@/contexts/DataContext';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building2, Users, DollarSign, TrendingUp } from 'lucide-react';
+import { companyService } from '@/services/companyService';
+import { creditClientService } from '@/services/creditClientService';
+import { purchaseService } from '@/services/purchaseService';
+import { Company, CreditClient, Purchase } from '@/types/appwrite';
 
 const DashboardAdmin: React.FC = () => {
-  const { empresas, clientes, compras } = useData();
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [allClients, setAllClients] = useState<CreditClient[]>([]);
+  const [allPurchases, setAllPurchases] = useState<Purchase[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const totalEmpresas = empresas.length;
-  const totalClientes = clientes.length;
-  const totalValorReceber = compras
-    .filter(c => c.status === 'ativa' || c.status === 'vencida')
-    .reduce((acc, c) => acc + c.valor, 0);
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [companiesData] = await Promise.all([
+        companyService.getCompanies()
+      ]);
+      
+      setCompanies(companiesData);
+
+      // Load all clients and purchases for all companies
+      const allClientsData: CreditClient[] = [];
+      const allPurchasesData: Purchase[] = [];
+
+      for (const company of companiesData) {
+        const clients = await creditClientService.getCreditClientsByCompany(company.$id);
+        const purchases = await purchaseService.getPurchasesByCompany(company.$id);
+        allClientsData.push(...clients);
+        allPurchasesData.push(...purchases);
+      }
+
+      setAllClients(allClientsData);
+      setAllPurchases(allPurchasesData);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  const totalEmpresas = companies.length;
+  const totalClientes = allClients.length;
+  const totalValorReceber = allPurchases
+    .filter(c => c.status === 'active' || c.status === 'overdue')
+    .reduce((acc, c) => acc + c.value, 0);
   
-  const totalLimiteConcedido = clientes.reduce((acc, c) => acc + c.limiteAjustado, 0);
+  const totalLimiteConcedido = allClients.reduce((acc, c) => acc + c.approvedLimit, 0);
 
   const stats = [
     {
@@ -87,15 +133,15 @@ const DashboardAdmin: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {empresas.slice(-5).map((empresa) => (
-                <div key={empresa.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              {companies.slice(-5).map((empresa) => (
+                <div key={empresa.$id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium text-gray-900">{empresa.nomeEmpresa}</p>
+                    <p className="font-medium text-gray-900">{empresa.name}</p>
                     <p className="text-sm text-gray-600">{empresa.cnpj}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium text-primary">
-                      {empresa.percentualAcordado}%
+                      {empresa.agreedPercentage}%
                     </p>
                     <p className="text-xs text-gray-500">Taxa acordada</p>
                   </div>
@@ -112,17 +158,19 @@ const DashboardAdmin: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {empresas.map((empresa) => {
-                const clientesEmpresa = clientes.filter(c => c.empresaId === empresa.id);
-                const comprasEmpresa = compras.filter(c => c.empresaId === empresa.id);
+              {companies.map((empresa) => {
+                const clientesEmpresa = allClients.filter(c => c.companyId === empresa.$id);
+                const comprasEmpresa = allPurchases.filter(p => 
+                  clientesEmpresa.some(c => c.$id === p.creditClientId)
+                );
                 const valorReceber = comprasEmpresa
-                  .filter(c => c.status === 'ativa' || c.status === 'vencida')
-                  .reduce((acc, c) => acc + c.valor, 0);
+                  .filter(c => c.status === 'active' || c.status === 'overdue')
+                  .reduce((acc, c) => acc + c.value, 0);
 
                 return (
-                  <div key={empresa.id} className="p-3 bg-gray-50 rounded-lg">
+                  <div key={empresa.$id} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-gray-900">{empresa.nomeEmpresa}</h4>
+                      <h4 className="font-medium text-gray-900">{empresa.name}</h4>
                       <span className="text-sm text-gray-500">{clientesEmpresa.length} clientes</span>
                     </div>
                     <div className="text-sm text-gray-600">

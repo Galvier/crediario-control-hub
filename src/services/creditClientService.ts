@@ -10,7 +10,7 @@ export const creditClientService = {
       ID.unique(),
       data
     );
-    return response as CreditClient;
+    return response as unknown as CreditClient;
   },
 
   async getCreditClientsByCompany(companyId: string): Promise<CreditClient[]> {
@@ -19,7 +19,7 @@ export const creditClientService = {
       COLLECTIONS.CREDIT_CLIENTS,
       [Query.equal('companyId', companyId)]
     );
-    return response.documents as CreditClient[];
+    return response.documents as unknown as CreditClient[];
   },
 
   async updateCreditClient(id: string, data: Partial<CreditClient>): Promise<CreditClient> {
@@ -29,7 +29,7 @@ export const creditClientService = {
       id,
       data
     );
-    return response as CreditClient;
+    return response as unknown as CreditClient;
   },
 
   async approveCreditClient(id: string): Promise<CreditClient> {
@@ -39,7 +39,7 @@ export const creditClientService = {
       id,
       { status: 'approved' }
     );
-    return response as CreditClient;
+    return response as unknown as CreditClient;
   },
 
   async getCreditClient(id: string): Promise<CreditClient> {
@@ -48,6 +48,6 @@ export const creditClientService = {
       COLLECTIONS.CREDIT_CLIENTS,
       id
     );
-    return response as CreditClient;
+    return response as unknown as CreditClient;
   }
 };
